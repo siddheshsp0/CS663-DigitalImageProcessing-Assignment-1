@@ -2,11 +2,6 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-# ============================================================
-# INPUT
-# ============================================================
-
 IMAGE_THRESHOLDS = {
     "data/thresh/blackboard.png": 55,
     "data/thresh/qr.png": 135,
@@ -14,25 +9,13 @@ IMAGE_THRESHOLDS = {
 }
 
 
-# ============================================================
-# Manual Thresholding
-# ============================================================
-
 def myManualThreshold(img: np.ndarray, threshold: float):
 
     binary = np.zeros_like(img, dtype=np.uint8)
 
-    # Dark pixels -> black
-    # Bright pixels -> white
-
     binary[img >= threshold] = 255
 
     return binary
-
-
-# ============================================================
-# Main
-# ============================================================
 
 if __name__ == "__main__":
 

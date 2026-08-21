@@ -25,10 +25,6 @@ def mySauvolaThreshold(img, block_size, k):
 
     img_float = img.astype(np.float64)
 
-    # --------------------------------------------------------
-    # Local mean
-    # --------------------------------------------------------
-
     local_mean = cv2.boxFilter(
         img_float,
         ddepth=-1,
@@ -37,12 +33,7 @@ def mySauvolaThreshold(img, block_size, k):
         borderType=cv2.BORDER_CONSTANT
     )
 
-    # --------------------------------------------------------
     # Local variance
-    #
-    # Var(X) = E[X^2] - E[X]^2
-    # --------------------------------------------------------
-
     local_mean_square = cv2.boxFilter(
         img_float ** 2,
         ddepth=-1,
@@ -55,39 +46,22 @@ def mySauvolaThreshold(img, block_size, k):
         local_mean_square - local_mean ** 2
     )
 
-    # Floating-point errors can sometimes make
-    # variance very slightly negative.
     local_variance = np.maximum(
         local_variance,
         0
     )
 
-    # --------------------------------------------------------
     # Local standard deviation
-    # --------------------------------------------------------
-
     local_std = np.sqrt(local_variance)
 
-    # --------------------------------------------------------
     # R = maximum local standard deviation
-    # --------------------------------------------------------
-
     R = np.max(local_std)
 
-    # --------------------------------------------------------
     # Sauvola threshold
-    #
-    # T = mean + mean * k * (std / R - 1)
-    # --------------------------------------------------------
-
     threshold_image = (
         local_mean
         + local_mean * k * (local_std / R - 1)
     )
-
-    # --------------------------------------------------------
-    # Apply threshold
-    # --------------------------------------------------------
 
     binary = np.zeros_like(
         img,

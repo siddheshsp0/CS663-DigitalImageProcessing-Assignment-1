@@ -14,11 +14,7 @@ def myOtsuThreshold(img: np.ndarray):
 
     # Histogram
     histogram = np.bincount(img.ravel(),minlength=256).astype(np.float64)
-
-    # Normalize histogram
     histogram /= histogram.sum()
-
-    # Intensity values
     intensity = np.arange(256)
 
     # Total image mean
@@ -33,7 +29,6 @@ def myOtsuThreshold(img: np.ndarray):
     best_threshold = 0
     best_variance = -1.0
 
-    # Try every possible threshold
     for T in range(256):
 
         omega0 += histogram[T]
