@@ -10,10 +10,9 @@ INPUT_IMAGES = [
 ]
 
 # Must be odd
-BLOCK_SIZE = 531
-
+BLOCK_SIZE = [531, 151, 301]
 # Sauvola parameter
-K = 0.2
+K = [0.2, 0.2, 0.15]
 
 
 def mySauvolaThreshold(img, block_size, k):
@@ -93,8 +92,8 @@ if __name__ == "__main__":
 
         binary, threshold_image = mySauvolaThreshold(
             img,
-            BLOCK_SIZE,
-            K
+            BLOCK_SIZE[row],
+            K[row]
         )
 
         image_name = input_image.split("/")[-1]
@@ -105,8 +104,9 @@ if __name__ == "__main__":
             aspect="equal"
         )
 
-        axes[row, 0].set_title(
-            f"{image_name} - Original"
+        axes[row, 1].set_title(
+            f"Sauvola Thresholding\n"
+            f"Block = {BLOCK_SIZE[row]}, k = {K[row]}"
         )
         axes[row, 0].set_xlabel("Column")
         axes[row, 0].set_ylabel("Row")
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
         axes[row, 1].set_title(
             f"Sauvola Thresholding\n"
-            f"Block = {BLOCK_SIZE}, k = {K}"
+            f"Block = {BLOCK_SIZE[row]}, k = {K[row]}"
         )
         axes[row, 1].set_xlabel("Column")
         axes[row, 1].set_ylabel("Row")
