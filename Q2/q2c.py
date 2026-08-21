@@ -13,7 +13,7 @@ INPUT_IMAGES = [
 BLOCK_SIZE = 531
 
 # Sauvola parameter
-K = 0.1
+K = 0.2
 
 
 def mySauvolaThreshold(img, block_size, k):
