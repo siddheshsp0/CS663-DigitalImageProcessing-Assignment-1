@@ -8,31 +8,17 @@ REFERENCE_PATH = "data/hist/retinaRef.png"
 
 
 def myHistMatch(source, reference, bins=64):
-    """
-    Histogram matching of source to reference.
 
-    Matching is performed independently on:
-        L = luminance
-        a, b = chroma
-
-    Only foreground pixels are used.
-    Background is assumed to be black.
-    """
-
-    # ---------------------------------------------------------
-    # Convert BGR -> Lab
-    # ---------------------------------------------------------
     source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB)
     reference_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB)
 
     matched_lab = source_lab.copy()
 
-    # ---------------------------------------------------------
-    # Foreground masks
-    # Black background has BGR = (0,0,0)
-    # ---------------------------------------------------------
-    source_mask = np.any(source != 0, axis=2)
-    reference_mask = np.any(reference != 0, axis=2)
+    def foreground_mask(img, thresh=8):
+        return np.any(img > thresh, axis=2)
+
+    source_mask = foreground_mask(source)
+    reference_mask = foreground_mask(reference)
 
     def match_channel(src_channel, ref_channel,
                       src_mask, ref_mask):
@@ -40,9 +26,7 @@ def myHistMatch(source, reference, bins=64):
         src_values = src_channel[src_mask].astype(np.float64)
         ref_values = ref_channel[ref_mask].astype(np.float64)
 
-        # -----------------------------------------------------
         # Histogram
-        # -----------------------------------------------------
         src_hist, bin_edges = np.histogram(
             src_values,
             bins=bins,
@@ -55,19 +39,15 @@ def myHistMatch(source, reference, bins=64):
             range=(0, 256)
         )
 
-        # -----------------------------------------------------
         # CDF
-        # -----------------------------------------------------
         src_cdf = np.cumsum(src_hist).astype(np.float64)
         ref_cdf = np.cumsum(ref_hist).astype(np.float64)
 
         src_cdf /= src_cdf[-1]
         ref_cdf /= ref_cdf[-1]
 
-        # -----------------------------------------------------
         # Mapping:
-        # source CDF -> reference CDF
-        # -----------------------------------------------------
+        # source CDF and reference CDF
         mapping = np.zeros(bins)
 
         for i in range(bins):
@@ -75,18 +55,14 @@ def myHistMatch(source, reference, bins=64):
             j = np.argmin(np.abs(ref_cdf - src_cdf[i]))
             mapping[i] = j
 
-        # -----------------------------------------------------
-        # Convert source pixel value -> source bin
-        # -----------------------------------------------------
+        # Convert src pixel value to src bin
         src_bin = np.floor(
             src_values / 256.0 * bins
         ).astype(int)
 
         src_bin = np.clip(src_bin, 0, bins - 1)
 
-        # -----------------------------------------------------
         # Convert mapped bin back to intensity
-        # -----------------------------------------------------
         matched_values = (
             (mapping[src_bin] + 0.5)
             * 256.0 / bins
@@ -100,9 +76,7 @@ def myHistMatch(source, reference, bins=64):
 
         return matched_values.astype(np.uint8)
 
-    # ---------------------------------------------------------
     # Match L, a and b independently
-    # ---------------------------------------------------------
     for channel in range(3):
 
         matched_values = match_channel(
@@ -114,9 +88,6 @@ def myHistMatch(source, reference, bins=64):
 
         matched_lab[:, :, channel][source_mask] = matched_values
 
-    # ---------------------------------------------------------
-    # Lab -> BGR
-    # ---------------------------------------------------------
     matched = cv2.cvtColor(
         matched_lab,
         cv2.COLOR_LAB2BGR
@@ -157,9 +128,8 @@ def plot_histogram(img, title, bins=64):
 
 
 if __name__ == "__main__":
-    # ---------------------------------------------------------
+
     # Load images
-    # ---------------------------------------------------------
     source = cv2.imread(SOURCE_PATH)
     reference = cv2.imread(REFERENCE_PATH)
 
@@ -169,10 +139,7 @@ if __name__ == "__main__":
     if reference is None:
         raise FileNotFoundError(REFERENCE_PATH)
 
-
-    # ---------------------------------------------------------
     # Try different bin sizes
-    # ---------------------------------------------------------
     bin_settings = [8, 32, 64, 128, 256]
 
     for bins in bin_settings:
@@ -183,9 +150,7 @@ if __name__ == "__main__":
             bins=bins
         )
 
-        # -----------------------------------------------------
         # Images side by side
-        # -----------------------------------------------------
         plt.figure(figsize=(15, 5))
 
         plt.subplot(1, 3, 1)
@@ -206,9 +171,6 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.show()
 
-        # -----------------------------------------------------
-        # Histograms
-        # -----------------------------------------------------
         plot_histogram(
             source,
             f"Original ({bins} bins)",
