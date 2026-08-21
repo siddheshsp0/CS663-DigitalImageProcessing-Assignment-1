@@ -2,654 +2,281 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-# ============================================================
-# INPUT IMAGES
-# ============================================================
-
-CANYON_PATH = "data/hist/canyon.png"
-RETINA_PATH = "data/hist/retina.png"
-
-
-# ============================================================
-# TUNABLE CLAHE PARAMETERS
-# ============================================================
-
-# Main / tuned parameters
-N_BINS = 64
+#params
+NUM_BINS = 64
+# Main tuned neighborhood size
 WINDOW_SIZE = 101
-HIST_THRESHOLD = 0.05
-
-# Significantly larger neighborhood
+# Histogram clipping threshold in [0, 1]
+# Clip limit = CLIP_THRESHOLD * number of pixels in window
+CLIP_THRESHOLD = 0.05
+# Automatically used for the half-threshold experiment
+HALF_THRESHOLD = CLIP_THRESHOLD / 2.0
+# Significantly larger/smaller windows
 LARGE_WINDOW_SIZE = 401
-
-# Significantly smaller neighborhood
 SMALL_WINDOW_SIZE = 21
 
-# Half the histogram threshold
-HALF_HIST_THRESHOLD = HIST_THRESHOLD / 2.0
+def myCLAHE(img: np.ndarray,num_bins: int,window_size: int,clip_threshold: float):
 
+    if not (0.0 <= clip_threshold <= 1.0):
+        raise ValueError("clip_threshold must be in [0, 1]")
 
-# ============================================================
-# CLAHE
-# ============================================================
+    if window_size < 1 or window_size % 2 == 0:
+        raise ValueError("window_size must be a positive odd integer")
 
-def myCLAHE(
-    img: np.ndarray,
-    n_bins: int,
-    window_size: int,
-    hist_threshold: float
-):
-    """
-    Contrast-Limited Adaptive Histogram Equalization.
+    # RGB -> YCrCb
+    rgb = img.astype(np.float32) / 255.0
+    ycrcb = cv2.cvtColor(
+        rgb,
+        cv2.COLOR_RGB2YCrCb
+    )
 
-    Parameters
-    ----------
-    img : np.ndarray
-        Input BGR image.
-
-    n_bins : int
-        Number of bins used for the local histogram.
-
-    window_size : int
-        Size of the square local neighborhood.
-
-    hist_threshold : float
-        Histogram clipping threshold in [0, 1].
-
-        The threshold is interpreted as a fraction of the
-        number of pixels in the local window.
-
-    Returns
-    -------
-    enhanced_img : np.ndarray
-        CLAHE enhanced BGR image.
-
-    threshold_image : np.ndarray
-        Per-pixel local clipping threshold.
-    """
-
-    # --------------------------------------------------------
-    # Convert BGR -> YCrCb
-    # --------------------------------------------------------
-
-    ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-
+    # Luminance in [0,1]
     Y = ycrcb[:, :, 0].astype(np.float64)
 
     M, N = Y.shape
+    equalized_Y = np.zeros_like(Y)
 
-    # --------------------------------------------------------
-    # Make sure window size is odd
-    # --------------------------------------------------------
+    # Half window size
+    radius = window_size // 2
 
-    if window_size % 2 == 0:
-        window_size += 1
-
-    half = window_size // 2
-
-    # --------------------------------------------------------
-    # Histogram clipping threshold
-    #
-    # Maximum number of pixels allowed in each histogram bin.
-    #
-    # hist_threshold = 0.05 means:
-    #
-    #     clip_limit = 5% of local window pixels
-    #
-    # --------------------------------------------------------
-
-    window_area = window_size * window_size
-
-    clip_limit = hist_threshold * window_area
-
-    # Per-pixel threshold image
-    threshold_image = np.full(
-        (M, N),
-        clip_limit,
-        dtype=np.float64
-    )
-
-    # --------------------------------------------------------
-    # Quantize luminance into histogram bins
-    # --------------------------------------------------------
-
-    bin_width = 256.0 / n_bins
-
-    bin_indices = np.floor(Y / bin_width).astype(np.int32)
-
-    # Make sure 255 belongs to the last bin
-    bin_indices = np.clip(
-        bin_indices,
-        0,
-        n_bins - 1
-    )
-
-    # --------------------------------------------------------
-    # Output
-    # --------------------------------------------------------
-
-    enhanced_Y = np.zeros(
-        (M, N),
-        dtype=np.float64
-    )
-
-    # --------------------------------------------------------
-    # We process the image one pixel at a time.
-    #
-    # For each pixel:
-    #   1. Take its local window.
-    #   2. Construct histogram.
-    #   3. Clip histogram.
-    #   4. Redistribute excess pixels.
-    #   5. Compute CDF.
-    #   6. Map the center pixel using the CDF.
-    #
-    # Boundary windows are automatically cropped.
-    # --------------------------------------------------------
-
+    #Process every pixel
     for i in range(M):
-
-        if i % 100 == 0:
+        if i % 50 == 0:
             print(
                 f"Processing row {i}/{M} "
-                f"({100.0 * i / M:.1f}%)"
+                f"({100*i/M:.1f}%)"
             )
 
-        r0 = max(0, i - half)
-        r1 = min(M, i + half + 1)
+        # Window boundaries
+        # np.clip effectively crops the window at boundaries
+        r0 = max(0, i - radius)
+        r1 = min(M, i + radius + 1)
 
         for j in range(N):
 
-            c0 = max(0, j - half)
-            c1 = min(N, j + half + 1)
+            c0 = max(0, j - radius)
+            c1 = min(N, j + radius + 1)
+            # Local window
+            local = Y[r0:r1, c0:c1]
 
-            # ------------------------------------------------
             # Local histogram
-            # ------------------------------------------------
-
-            local_bins = bin_indices[r0:r1, c0:c1]
-
-            hist = np.bincount(
-                local_bins.ravel(),
-                minlength=n_bins
-            ).astype(np.float64)
-
-            # ------------------------------------------------
-            # Actual number of pixels in the cropped window
-            # ------------------------------------------------
-
-            local_area = local_bins.size
-
-            # ------------------------------------------------
-            # Clip limit for this particular boundary window
-            # ------------------------------------------------
-
-            local_clip_limit = hist_threshold * local_area
-
-            # Store per-pixel threshold
-            threshold_image[i, j] = local_clip_limit
-
-            # ------------------------------------------------
-            # Clip histogram
-            # ------------------------------------------------
-
-            clipped = np.minimum(
-                hist,
-                local_clip_limit
+            hist, _ = np.histogram(
+                local,
+                bins=num_bins,
+                range=(0.0, 1.0)
             )
 
-            # Number of excess pixels
+            hist = hist.astype(np.float64)
+
+            # CLIP HISTOGRAM
+            # Number of pixels actually inside the window
+            window_pixels = local.size
+
+            # Threshold is normalized by window size
+            clip_limit = clip_threshold * window_pixels
+
+            # Amount clipped from each bin
             excess = np.sum(
-                hist - clipped
+                np.maximum(hist - clip_limit, 0)
             )
 
-            # ------------------------------------------------
-            # Redistribute excess uniformly
-            # ------------------------------------------------
-
-            clipped += excess / n_bins
-
-            # ------------------------------------------------
-            # Compute CDF
-            # ------------------------------------------------
-
-            center_bin = bin_indices[i, j]
-
-            cdf = np.sum(
-                clipped[:center_bin + 1]
+            # Clip histogram
+            hist = np.minimum(
+                hist,
+                clip_limit
             )
 
-            # ------------------------------------------------
-            # Normalize CDF
-            # ------------------------------------------------
+            # redistributing histogram mass uniformly
+            hist += excess / num_bins
+            # CDF
+            cdf = np.cumsum(hist)
+            # Normalize CDF to [0,1]
+            cdf = cdf / cdf[-1]
 
-            # Use the actual local window size.
-            #
-            # This ensures that boundary windows are normalized
-            # using only pixels actually present in the image.
-            # ------------------------------------------------
+            # Map center pixel through CDF
+            center_value = Y[i, j]
+            bin_index = int(
+                np.floor(center_value * num_bins)
+            )
+            bin_index = np.clip(bin_index,0,num_bins - 1)
+            equalized_Y[i, j] = cdf[bin_index]
 
-            value = (
-                cdf / local_area
-            ) * 255.0
+    print("Processing complete.")
 
-            enhanced_Y[i, j] = value
+    # Replace luminance
+    ycrcb_equalized = ycrcb.copy()
 
-    # --------------------------------------------------------
-    # Clip output luminance
-    # --------------------------------------------------------
-
-    enhanced_Y = np.clip(
-        enhanced_Y,
-        0,
-        255
+    ycrcb_equalized[:, :, 0] = (
+        equalized_Y.astype(np.float32)
     )
 
-    # --------------------------------------------------------
-    # Replace luminance only
-    #
-    # Chroma is preserved.
-    # --------------------------------------------------------
-
-    ycrcb[:, :, 0] = enhanced_Y.astype(np.uint8)
-
-    # --------------------------------------------------------
-    # Convert back to BGR
-    # --------------------------------------------------------
-
-    enhanced_img = cv2.cvtColor(
-        ycrcb,
-        cv2.COLOR_YCrCb2BGR
+    # YCrCb -> RGB
+    equalized_rgb = cv2.cvtColor(
+        ycrcb_equalized,
+        cv2.COLOR_YCrCb2RGB
     )
 
-    return enhanced_img, threshold_image
-
-
-# ============================================================
-# LUMINANCE
-# ============================================================
-
-def get_luminance(img):
-
-    ycrcb = cv2.cvtColor(
-        img,
-        cv2.COLOR_BGR2YCrCb
+    equalized_rgb = np.clip(
+        equalized_rgb,
+        0.0,
+        1.0
     )
 
-    return ycrcb[:, :, 0]
+    # Convert back to uint8 for display
+    equalized_rgb = (
+        equalized_rgb * 255
+    ).astype(np.uint8)
+
+    return equalized_rgb, Y, equalized_Y
 
 
-# ============================================================
-# DISPLAY ONE SET OF RESULTS
-# ============================================================
+def plot_histogram(ax, Y, title, num_bins):
+    ax.hist(Y.ravel(),bins=num_bins,range=(0, 1))
+    ax.set_title(title)
+    ax.set_xlabel("Luminance")
+    ax.set_ylabel("Number of Pixels")
+    ax.set_xlim(0, 1)
 
-def display_results(
-    original,
-    results,
-    title_prefix
+
+#display results for canyon
+def show_canyon_results(
+    original_rgb,
+    original_Y,
+    tuned,
+    large,
+    small,
+    half
 ):
 
-    original_rgb = cv2.cvtColor(
-        original,
-        cv2.COLOR_BGR2RGB
-    )
+    tuned_rgb, tuned_Y = tuned
+    large_rgb, large_Y = large
+    small_rgb, small_Y = small
+    half_rgb, half_Y = half
 
-    # --------------------------------------------------------
-    # Image display
-    # --------------------------------------------------------
-
+    # Images
     fig, axes = plt.subplots(
-        1,
-        len(results) + 1,
-        figsize=(22, 6)
+        1, 5,
+        figsize=(22, 5)
     )
 
     axes[0].imshow(original_rgb)
     axes[0].set_title("Original")
-    axes[0].set_xlabel("Column")
-    axes[0].set_ylabel("Row")
 
-    for k, (name, img) in enumerate(results, start=1):
-
-        img_rgb = cv2.cvtColor(
-            img,
-            cv2.COLOR_BGR2RGB
-        )
-
-        axes[k].imshow(img_rgb)
-
-        axes[k].set_title(name)
-
-        axes[k].set_xlabel("Column")
-        axes[k].set_ylabel("Row")
-
-    fig.suptitle(
-        title_prefix + " - CLAHE Results",
-        fontsize=16
+    axes[1].imshow(tuned_rgb)
+    axes[1].set_title(
+        f"Tuned\n"
+        f"Bins={NUM_BINS}, "
+        f"W={WINDOW_SIZE}, "
+        f"T={CLIP_THRESHOLD}"
     )
 
-    plt.tight_layout()
-    plt.show()
-
-    # --------------------------------------------------------
-    # Histograms
-    # --------------------------------------------------------
-
-    fig, axes = plt.subplots(
-        1,
-        len(results) + 1,
-        figsize=(22, 5)
+    axes[2].imshow(large_rgb)
+    axes[2].set_title(
+        f"Large Window\n"
+        f"W={LARGE_WINDOW_SIZE}"
     )
 
-    original_Y = get_luminance(original)
-
-    axes[0].hist(
-        original_Y.ravel(),
-        bins=256,
-        range=(0, 255)
+    axes[3].imshow(small_rgb)
+    axes[3].set_title(
+        f"Small Window\n"
+        f"W={SMALL_WINDOW_SIZE}"
     )
 
-    axes[0].set_title("Original Histogram")
-    axes[0].set_xlabel("Luminance")
-    axes[0].set_ylabel("Number of Pixels")
-    axes[0].set_xlim(0, 255)
-
-    for k, (name, img) in enumerate(results, start=1):
-
-        Y = get_luminance(img)
-
-        axes[k].hist(
-            Y.ravel(),
-            bins=256,
-            range=(0, 255)
-        )
-
-        axes[k].set_title(
-            name + "\nHistogram"
-        )
-
-        axes[k].set_xlabel("Luminance")
-        axes[k].set_ylabel("Number of Pixels")
-        axes[k].set_xlim(0, 255)
-
-    fig.suptitle(
-        title_prefix + " - Luminance Histograms",
-        fontsize=16
+    axes[4].imshow(half_rgb)
+    axes[4].set_title(
+        f"Half Threshold\n"
+        f"T={HALF_THRESHOLD}"
     )
 
-    plt.tight_layout()
-    plt.show()
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-if __name__ == "__main__":
-
-    # ========================================================
-    # CANYON
-    # ========================================================
-
-    canyon = cv2.imread(CANYON_PATH)
-
-    if canyon is None:
-        raise FileNotFoundError(
-            f"Could not read {CANYON_PATH}"
-        )
-
-    print("\n========================================")
-    print("Processing CANYON")
-    print("========================================")
-
-    # --------------------------------------------------------
-    # 1. Tuned parameters
-    # --------------------------------------------------------
-
-    print("\nTuned CLAHE")
-
-    canyon_normal, threshold_normal = myCLAHE(
-        canyon,
-        N_BINS,
-        WINDOW_SIZE,
-        HIST_THRESHOLD
-    )
-
-    # --------------------------------------------------------
-    # 2. Large neighborhood
-    # --------------------------------------------------------
-
-    print("\nLarge neighborhood")
-
-    canyon_large, threshold_large = myCLAHE(
-        canyon,
-        N_BINS,
-        LARGE_WINDOW_SIZE,
-        HIST_THRESHOLD
-    )
-
-    # --------------------------------------------------------
-    # 3. Small neighborhood
-    # --------------------------------------------------------
-
-    print("\nSmall neighborhood")
-
-    canyon_small, threshold_small = myCLAHE(
-        canyon,
-        N_BINS,
-        SMALL_WINDOW_SIZE,
-        HIST_THRESHOLD
-    )
-
-    # --------------------------------------------------------
-    # 4. Half histogram threshold
-    # --------------------------------------------------------
-
-    print("\nHalf histogram threshold")
-
-    canyon_half_threshold, threshold_half = myCLAHE(
-        canyon,
-        N_BINS,
-        WINDOW_SIZE,
-        HALF_HIST_THRESHOLD
-    )
-
-    # --------------------------------------------------------
-    # Display Canyon
-    # --------------------------------------------------------
-
-    canyon_results = [
-
-        (
-            f"Tuned\n"
-            f"Bins={N_BINS}, "
-            f"W={WINDOW_SIZE}, "
-            f"T={HIST_THRESHOLD}",
-            canyon_normal
-        ),
-
-        (
-            f"Large Window\n"
-            f"W={LARGE_WINDOW_SIZE}",
-            canyon_large
-        ),
-
-        (
-            f"Small Window\n"
-            f"W={SMALL_WINDOW_SIZE}",
-            canyon_small
-        ),
-
-        (
-            f"Half Threshold\n"
-            f"T={HALF_HIST_THRESHOLD}",
-            canyon_half_threshold
-        )
-
-    ]
-
-    display_results(
-        canyon,
-        canyon_results,
-        "Canyon"
-    )
-
-    # --------------------------------------------------------
-    # Display per-pixel thresholds
-    # --------------------------------------------------------
-
-    fig, axes = plt.subplots(
-        1,
-        4,
-        figsize=(20, 5)
-    )
-
-    threshold_data = [
-
-        (
-            "Tuned",
-            threshold_normal
-        ),
-
-        (
-            "Large Window",
-            threshold_large
-        ),
-
-        (
-            "Small Window",
-            threshold_small
-        ),
-
-        (
-            "Half Threshold",
-            threshold_half
-        )
-
-    ]
-
-    for ax, (name, threshold) in zip(
-        axes,
-        threshold_data
-    ):
-
-        im = ax.imshow(
-            threshold,
-            cmap="jet"
-        )
-
-        ax.set_title(
-            "Local Histogram Threshold\n" + name
-        )
-
+    for ax in axes:
         ax.set_xlabel("Column")
         ax.set_ylabel("Row")
 
-        plt.colorbar(
-            im,
-            ax=ax
-        )
+    fig.suptitle(
+        "Canyon - CLAHE Results",
+        fontsize=16
+    )
 
     plt.tight_layout()
     plt.show()
 
+    # Histogram
+    fig, axes = plt.subplots(1, 5, figsize=(22, 5))
 
-    # ========================================================
-    # RETINA
-    # ========================================================
+    plot_histogram(axes[0],original_Y,"Original Histogram",NUM_BINS)
+    plot_histogram(axes[1],tuned_Y,f"Tuned\n"f"Bins={NUM_BINS}, W={WINDOW_SIZE}, "f"T={CLIP_THRESHOLD}",NUM_BINS)
+    plot_histogram(axes[2],large_Y,f"Large Window\nW={LARGE_WINDOW_SIZE}",NUM_BINS)
+    plot_histogram(axes[3],small_Y,f"Small Window\nW={SMALL_WINDOW_SIZE}",NUM_BINS)
+    plot_histogram(axes[4],half_Y,f"Half Threshold\nT={HALF_THRESHOLD}",NUM_BINS)
+    fig.suptitle("Canyon - Luminance Histograms",fontsize=16)
 
-    retina = cv2.imread(RETINA_PATH)
+    plt.tight_layout()
+    plt.show()
 
-    if retina is None:
+if __name__ == "__main__":
+    canyon_bgr = cv2.imread(
+        "data/hist/canyon.png"
+    )
+    if canyon_bgr is None:
         raise FileNotFoundError(
-            f"Could not read {RETINA_PATH}"
+            "Could not read canyon.png"
         )
-
-    print("\n========================================")
-    print("Processing RETINA")
-    print("========================================")
-
-    # --------------------------------------------------------
-    # Tuned CLAHE
-    # --------------------------------------------------------
-
-    retina_normal, retina_threshold = myCLAHE(
-        retina,
-        N_BINS,
-        WINDOW_SIZE,
-        HIST_THRESHOLD
+    canyon_rgb = cv2.cvtColor(
+        canyon_bgr,
+        cv2.COLOR_BGR2RGB
     )
 
-    # --------------------------------------------------------
-    # Large neighborhood
-    # --------------------------------------------------------
+    # Get original luminance
+    canyon_float = (
+        canyon_rgb.astype(np.float32) / 255.0
+    )
 
-    retina_large, _ = myCLAHE(
-        retina,
-        N_BINS,
+    canyon_ycrcb = cv2.cvtColor(
+        canyon_float,
+        cv2.COLOR_RGB2YCrCb
+    )
+
+    canyon_Y = canyon_ycrcb[:, :, 0]
+    print("\n========== TUNED CLAHE ==========")
+
+    tuned_rgb, _, tuned_Y = myCLAHE(
+        canyon_rgb,
+        NUM_BINS,
+        WINDOW_SIZE,
+        CLIP_THRESHOLD
+    )
+
+    print("\n========== LARGE WINDOW ==========")
+
+    large_rgb, _, large_Y = myCLAHE(
+        canyon_rgb,
+        NUM_BINS,
         LARGE_WINDOW_SIZE,
-        HIST_THRESHOLD
+        CLIP_THRESHOLD
     )
+    print("\n========== SMALL WINDOW ==========")
 
-    # --------------------------------------------------------
-    # Small neighborhood
-    # --------------------------------------------------------
-
-    retina_small, _ = myCLAHE(
-        retina,
-        N_BINS,
+    small_rgb, _, small_Y = myCLAHE(
+        canyon_rgb,
+        NUM_BINS,
         SMALL_WINDOW_SIZE,
-        HIST_THRESHOLD
+        CLIP_THRESHOLD
     )
 
-    # --------------------------------------------------------
-    # Half histogram threshold
-    # --------------------------------------------------------
 
-    retina_half_threshold, _ = myCLAHE(
-        retina,
-        N_BINS,
+    print("\n========== HALF THRESHOLD ==========")
+
+    half_rgb, _, half_Y = myCLAHE(
+        canyon_rgb,
+        NUM_BINS,
         WINDOW_SIZE,
-        HALF_HIST_THRESHOLD
+        HALF_THRESHOLD
     )
-
-    # --------------------------------------------------------
-    # Display Retina
-    # --------------------------------------------------------
-
-    retina_results = [
-
-        (
-            f"Tuned\n"
-            f"Bins={N_BINS}, "
-            f"W={WINDOW_SIZE}, "
-            f"T={HIST_THRESHOLD}",
-            retina_normal
-        ),
-
-        (
-            f"Large Window\n"
-            f"W={LARGE_WINDOW_SIZE}",
-            retina_large
-        ),
-
-        (
-            f"Small Window\n"
-            f"W={SMALL_WINDOW_SIZE}",
-            retina_small
-        ),
-
-        (
-            f"Half Threshold\n"
-            f"T={HALF_HIST_THRESHOLD}",
-            retina_half_threshold
-        )
-
-    ]
-
-    display_results(
-        retina,
-        retina_results,
-        "Retina"
+    show_canyon_results(
+        canyon_rgb,
+        canyon_Y,
+        (tuned_rgb, tuned_Y),
+        (large_rgb, large_Y),
+        (small_rgb, small_Y),
+        (half_rgb, half_Y)
     )
