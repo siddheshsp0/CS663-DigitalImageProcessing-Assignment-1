@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 # INPUT
 # ============================================================
 
-INPUT_IMAGE = "data/thresh/receipt.png"
-
-# Tune this parameter
-THRESHOLD = 150
+IMAGE_THRESHOLDS = {
+    "data/thresh/blackboard.png": 55,
+    "data/thresh/qr.png": 135,
+    "data/thresh/receipt.png": 150,
+}
 
 
 # ============================================================
@@ -35,56 +36,55 @@ def myManualThreshold(img: np.ndarray, threshold: float):
 
 if __name__ == "__main__":
 
-    # Read grayscale image
-    img = cv2.imread(
-        INPUT_IMAGE,
-        cv2.IMREAD_GRAYSCALE
+    fig, axes = plt.subplots(
+        len(IMAGE_THRESHOLDS), 2,
+        figsize=(6, 2.5 * len(IMAGE_THRESHOLDS))
     )
 
-    if img is None:
-        raise FileNotFoundError(
-            f"Could not read {INPUT_IMAGE}"
+    for row, (input_image, threshold) in enumerate(
+        IMAGE_THRESHOLDS.items()
+    ):
+        img = cv2.imread(
+            input_image,
+            cv2.IMREAD_GRAYSCALE
         )
 
-    # Apply manual threshold
-    binary = myManualThreshold(
-        img,
-        THRESHOLD
-    )
+        if img is None:
+            raise FileNotFoundError(
+                f"Could not read {input_image}"
+            )
 
-    # --------------------------------------------------------
-    # Display
-    # --------------------------------------------------------
+        binary = myManualThreshold(
+            img,
+            threshold
+        )
 
-    fig, axes = plt.subplots(
-        1, 2,
-        figsize=(12, 5)
-    )
+        axes[row, 0].imshow(
+            img,
+            cmap="gray",
+            aspect="equal"
+        )
 
-    axes[0].imshow(
-        img,
-        cmap="gray",
-        aspect="equal"
-    )
+        axes[row, 0].set_title(
+            input_image.split("/")[-1] + " - Original"
+        )
+        axes[row, 0].set_xlabel("Column")
+        axes[row, 0].set_ylabel("Row")
 
-    axes[0].set_title("Original")
-    axes[0].set_xlabel("Column")
-    axes[0].set_ylabel("Row")
+        axes[row, 1].imshow(
+            binary,
+            cmap="gray",
+            vmin=0,
+            vmax=255,
+            aspect="equal"
+        )
 
-    axes[1].imshow(
-        binary,
-        cmap="gray",
-        vmin=0,
-        vmax=255,
-        aspect="equal"
-    )
+        axes[row, 1].set_title(
+            f"Manual Thresholding (T = {threshold})"
+        )
 
-    axes[1].set_title(
-        f"Manual Thresholding (T = {THRESHOLD})"
-    )
-
-    axes[1].set_xlabel("Column")
-    axes[1].set_ylabel("Row")
+        axes[row, 1].set_xlabel("Column")
+        axes[row, 1].set_ylabel("Row")
 
     plt.tight_layout()
     plt.show()

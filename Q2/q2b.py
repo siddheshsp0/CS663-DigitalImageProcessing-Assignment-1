@@ -2,25 +2,18 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-# ============================================================
 # INPUT
-# ============================================================
+INPUT_IMAGES = [
+    "data/thresh/blackboard.png",
+    "data/thresh/qr.png",
+    "data/thresh/receipt.png",
+]
 
-INPUT_IMAGE = "data/thresh/receipt.png"
-
-
-# ============================================================
 # Otsu Thresholding
-# ============================================================
-
 def myOtsuThreshold(img: np.ndarray):
 
     # Histogram
-    histogram = np.bincount(
-        img.ravel(),
-        minlength=256
-    ).astype(np.float64)
+    histogram = np.bincount(img.ravel(),minlength=256).astype(np.float64)
 
     # Normalize histogram
     histogram /= histogram.sum()
@@ -29,9 +22,7 @@ def myOtsuThreshold(img: np.ndarray):
     intensity = np.arange(256)
 
     # Total image mean
-    total_mean = np.sum(
-        intensity * histogram
-    )
+    total_mean = np.sum(intensity * histogram)
 
     # Weight of class 0
     omega0 = 0.0
@@ -42,10 +33,7 @@ def myOtsuThreshold(img: np.ndarray):
     best_threshold = 0
     best_variance = -1.0
 
-    # --------------------------------------------------------
     # Try every possible threshold
-    # --------------------------------------------------------
-
     for T in range(256):
 
         omega0 += histogram[T]
@@ -80,84 +68,69 @@ def myOtsuThreshold(img: np.ndarray):
             best_variance = variance
             best_threshold = T
 
-    # --------------------------------------------------------
     # Binarize
-    # --------------------------------------------------------
-
     binary = np.zeros_like(
         img,
         dtype=np.uint8
     )
 
-    # Dark pixels -> black
-    # Bright pixels -> white
-
-    binary[
-        img >= best_threshold
-    ] = 255
+    binary[img >= best_threshold] = 255
 
     return binary, best_threshold
 
-
-# ============================================================
-# Main
-# ============================================================
-
 if __name__ == "__main__":
 
-    # Read grayscale image
-    img = cv2.imread(
-        INPUT_IMAGE,
-        cv2.IMREAD_GRAYSCALE
+    fig, axes = plt.subplots(
+        len(INPUT_IMAGES), 2,
+        figsize=(8, 3 * len(INPUT_IMAGES))
     )
 
-    if img is None:
-        raise FileNotFoundError(
-            f"Could not read {INPUT_IMAGE}"
+    for row, input_image in enumerate(INPUT_IMAGES):
+        img = cv2.imread(
+            input_image,
+            cv2.IMREAD_GRAYSCALE
         )
 
-    # Otsu thresholding
-    binary, threshold = myOtsuThreshold(
-        img
-    )
+        if img is None:
+            raise FileNotFoundError(
+                f"Could not read {input_image}"
+            )
 
-    print(
-        f"Otsu threshold = {threshold}"
-    )
+        # Otsu thresholding
+        binary, threshold = myOtsuThreshold(
+            img
+        )
 
-    # --------------------------------------------------------
-    # Display
-    # --------------------------------------------------------
+        print(
+            f"{input_image}: Otsu threshold = {threshold}"
+        )
 
-    fig, axes = plt.subplots(
-        1, 2,
-        figsize=(12, 5)
-    )
+        axes[row, 0].imshow(
+            img,
+            cmap="gray",
+            aspect="equal"
+        )
 
-    axes[0].imshow(
-        img,
-        cmap="gray",
-        aspect="equal"
-    )
+        axes[row, 0].set_title(
+            input_image.split("/")[-1] + " - Original"
+        )
+        axes[row, 0].set_xlabel("Column")
+        axes[row, 0].set_ylabel("Row")
 
-    axes[0].set_title("Original")
-    axes[0].set_xlabel("Column")
-    axes[0].set_ylabel("Row")
+        axes[row, 1].imshow(
+            binary,
+            cmap="gray",
+            vmin=0,
+            vmax=255,
+            aspect="equal"
+        )
 
-    axes[1].imshow(
-        binary,
-        cmap="gray",
-        vmin=0,
-        vmax=255,
-        aspect="equal"
-    )
+        axes[row, 1].set_title(
+            f"Otsu Thresholding (T = {threshold})"
+        )
 
-    axes[1].set_title(
-        f"Otsu Thresholding (T = {threshold})"
-    )
-
-    axes[1].set_xlabel("Column")
-    axes[1].set_ylabel("Row")
+        axes[row, 1].set_xlabel("Column")
+        axes[row, 1].set_ylabel("Row")
 
     plt.tight_layout()
     plt.show()

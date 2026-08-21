@@ -3,10 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# ============================================================
-# INPUT
-# ============================================================
-
 INPUT_IMAGE = "data/thresh/receipt.png"
 
 # Must be odd
@@ -15,16 +11,8 @@ BLOCK_SIZE = 31
 # Threshold offset
 C = 5
 
-
-# ============================================================
 # Local / Adaptive Thresholding
-# ============================================================
-
-def myAdaptiveThreshold(
-    img: np.ndarray,
-    block_size: int,
-    C: float
-):
+def myAdaptiveThreshold(img, block_size, C):
 
     if block_size % 2 == 0:
         raise ValueError(
@@ -51,38 +39,20 @@ def myAdaptiveThreshold(
         borderType=cv2.BORDER_REFLECT
     )
 
-    # --------------------------------------------------------
     # Per-pixel threshold
-    #
     # T(x,y) = local_mean(x,y) - C
-    # --------------------------------------------------------
 
-    threshold_image = (
-        local_mean - C
-    )
+    threshold_image = (local_mean - C)
 
-    # --------------------------------------------------------
     # Apply threshold
-    #
     # Darker than local threshold -> black
     # Brighter than local threshold -> white
-    # --------------------------------------------------------
 
-    binary = np.zeros_like(
-        img,
-        dtype=np.uint8
-    )
+    binary = np.zeros_like(img,dtype=np.uint8)
 
-    binary[
-        img >= threshold_image
-    ] = 255
+    binary[img >= threshold_image] = 255
 
     return binary, threshold_image
-
-
-# ============================================================
-# Main
-# ============================================================
 
 if __name__ == "__main__":
 
